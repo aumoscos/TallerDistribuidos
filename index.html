@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inscripcion Evento</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <form id="miFormulario">
+        <label for="nombres">Nombres:</label><br>
+        <input type="text" id="nombres" name="nombres" required><br><br>
+
+        <label for="apellidos">Apellidos:</label><br>
+        <input type="text" id="apellidos" name="apellidos" required><br><br>
+
+        <label for="cedula">Número de cédula:</label><br>
+        <input type="text" id="cedula" name="cedula" required><br><br>
+
+        <label for="correo">Correo:</label><br>
+        <input type="email" id="correo" name="correo" required><br><br>
+
+        <div class="upload-section">
+            <p>Subir Foto</p>
+            <input type="file" id="file-upload" multiple>
+        </div>
+
+        <input type="submit" value="Enviar">
+    </form>
+
+    <div class="gallery-section">
+        <h2>Participantes ingresados</h2>
+        <div id="gallery"></div>
+    </div>
+
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.7.16.min.js"></script>
+    <script>
+        AWS.config.update({
+            accessKeyId: '',
+            secretAccessKey: '',
+            sessionToken: '',
+            region: 'us-east-1'
+        });
+
+        const s3 = new AWS.S3();
+        const bucketName = 'bucketimagenesmoscoso';
+
+        // Función para subir archivos y devolver una promesa
+        function subirImagenBucket() {
+            return new Promise((resolve, reject) => {
+                const files = document.getElementById('file-upload').files;
+                const uploadPromises = [];
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const params = {
+                        Bucket: bucketName,
+                        Key: file.name,
+                        Body: file,
+                        ACL: 'public-read' // Para hacer las imágenes públicamente accesibles
+                    };
+
+                    const uploadPromise = new Promise((resolve, reject) => {
+                        s3.upload(params, (err, data) => {
+                            if (err) {
+                                console.error('Error subiendo el archivo:', err);
+                                reject(err);
+                            } else {
+                                console.log('Archivo subido con éxito:', data.Location);
+                                resolve(data.Location);
+                            }
+                        });
+                    });
+
+                    uploadPromises.push(uploadPromise);
+                }
+
+                Promise.all(uploadPromises)
+                    .then(results => resolve(results))
+                    .catch(err => reject(err));
+            });
+        }
+
+        document.getElementById('miFormulario').addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            try {
+                const imageUrls = await subirImagenBucket();
+                console.log('Todas las imágenes han sido subidas:', imageUrls);
+
+                var jsonData = {
+                    "TableName": "registroInscripcion",
+                    "Item": {
+                        "Registro": document.getElementById('cedula').value,
+                        "Nombres": document.getElementById('nombres').value,
+                        "Apellidos": document.getElementById('apellidos').value,
+                        "correo": document.getElementById('correo').value,
+                        "imagen": imageUrls.join(', ')
+                    }
+                };
+                console.log(JSON.stringify(jsonData));
+
+                const response = await fetch('https://29axdr48ya.execute-api.us-east-1.amazonaws.com/default/Taller', {
+                    method: 'POST',
+                    body: JSON.stringify(jsonData)
+                });
+
+                const data = await response.json();
+                console.log('Success:', data);
+                alert('Formulario enviado exitosamente');
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al enviar el formulario: ' + error.message);
+            }
+        });
+        function mostrarImagenEnGaleria(url, Nombres, Apellidos, Correo, Cedula) {
+    const gallery = document.getElementById('gallery');
+    const itemContainer = document.createElement('div');
+    const img = document.createElement('img');
+    const textContainer = document.createElement('div');
+    const nombres = document.createElement('p');
+    const apellidos = document.createElement('p');
+    const correo = document.createElement('p');
+    const cedula = document.createElement('p');
+    
+    itemContainer.classList.add('item-container');
+    textContainer.classList.add('text-container');
+    
+    img.src = url;
+    nombres.textContent = Nombres;
+    apellidos.textContent = Apellidos;
+    correo.textContent = Correo;
+    cedula.textContent = Cedula;
+    
+    textContainer.appendChild(nombres);
+    textContainer.appendChild(apellidos);
+    textContainer.appendChild(correo);
+    textContainer.appendChild(cedula);
+    itemContainer.appendChild(img);
+    itemContainer.appendChild(textContainer);
+    gallery.appendChild(itemContainer);
+}
+
+        async function cargarImagenes() {  try {
+
+                const response = await fetch('https://29axdr48ya.execute-api.us-east-1.amazonaws.com/default/Taller?TableName=registroInscripcion', {
+                    method: 'GET',
+                });
+
+                const data = await response.json();
+                console.log('Success:', data);
+                for (var registro in data.Items){
+                    reg = data.Items[registro]
+                    mostrarImagenEnGaleria(reg.imagen, reg.Nombres, reg.Apellidos, reg.correo, reg.Registro)
+                    console.log(reg.imagen, reg.Nombres, reg.Apellidos, reg.correo, reg.Registro)
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al enviar el formulario: ' + error.message);
+            }
+            
+        }
+
+        document.addEventListener('DOMContentLoaded', cargarImagenes);
+
+    </script>
+
+</body>
+
+</html>
